@@ -1,0 +1,79 @@
+name: Build Tastica Print Agent
+
+on:
+    push:
+        branches: [main]
+    workflow_dispatch: # permite ejecutarlo manualmente desde GitHub
+
+jobs:
+    build-windows:
+        runs-on: windows-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 18
+
+            - name: Install dependencies
+              run: npm install
+              working-directory: tastica-print-server
+
+            - name: Build Windows
+              run: npm run dist:win
+              working-directory: tastica-print-server
+
+            - name: Upload .exe
+              uses: actions/upload-artifact@v4
+              with:
+                  name: windows-exe
+                  path: tastica-print-server/dist/*.exe
+
+    build-mac:
+        runs-on: macos-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 18
+
+            - name: Install dependencies
+              run: npm install
+              working-directory: tastica-print-server
+
+            - name: Build Mac
+              run: npm run dist:mac
+              working-directory: tastica-print-server
+
+            - name: Upload .dmg
+              uses: actions/upload-artifact@v4
+              with:
+                  name: mac-dmg
+                  path: tastica-print-server/dist/*.dmg
+
+    build-linux:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 18
+
+            - name: Install dependencies
+              run: npm install
+              working-directory: tastica-print-server
+
+            - name: Build Linux
+              run: npm run dist:linux
+              working-directory: tastica-print-server
+
+            - name: Upload .AppImage
+              uses: actions/upload-artifact@v4
+              with:
+                  name: linux-appimage
+                  path: tastica-print-server/dist/*.AppImage

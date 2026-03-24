@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Tastica Print Agent</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            :root {
+                --bg: #0f0f13;
+                --surface: #17171f;
+                --border: #2a2a38;
+                --purple: #6a00ff;
+                --purple-dim: #3d0099;
+                --green: #00e676;
+                --yellow: #ffd740;
+                --red: #ff5252;
+                --blue: #40c4ff;
+                --text: #e8e8f0;
+                --muted: #6b6b80;
+                --font-mono: "Cascadia Code", "Fira Code", "Consolas", monospace;
+            }
+
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font-family: "Segoe UI", system-ui, sans-serif;
+                height: 100vh;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                user-select: none;
+            }
+
+            /* ── Titlebar ── */
+            .titlebar {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 14px 20px 12px;
+                border-bottom: 1px solid var(--border);
+                background: var(--surface);
+                flex-shrink: 0;
+            }
+
+            .titlebar-logo {
+                width: 28px;
+                height: 28px;
+                background: var(--purple);
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 14px;
+                font-weight: 900;
+                color: white;
+                letter-spacing: -1px;
+                flex-shrink: 0;
+            }
+
+            .titlebar-name {
+                font-size: 13px;
+                font-weight: 700;
+                color: var(--text);
+                letter-spacing: 0.3px;
+            }
+
+            .titlebar-sub {
+                font-size: 11px;
+                color: var(--muted);
+            }
+
+            /* ── Estado badge ── */
+            .estado-badge {
+                margin-left: auto;
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                padding: 5px 12px;
+                border-radius: 20px;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.5px;
+                text-transform: uppercase;
+                border: 1px solid transparent;
+                transition: all 0.3s ease;
+            }
+
+            .estado-badge .dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+            }
+
+            .estado-badge.conectado {
+                background: rgba(0, 230, 118, 0.1);
+                border-color: rgba(0, 230, 118, 0.3);
+                color: var(--green);
+            }
+            .estado-badge.conectado .dot {
+                background: var(--green);
+                box-shadow: 0 0 6px var(--green);
+                animation: pulse 2s infinite;
+            }
+
+            .estado-badge.iniciando {
+                background: rgba(64, 196, 255, 0.1);
+                border-color: rgba(64, 196, 255, 0.3);
+                color: var(--blue);
+            }
+            .estado-badge.iniciando .dot {
+                background: var(--blue);
+                animation: pulse 1s infinite;
+            }
+
+            .estado-badge.sin-configurar {
+                background: rgba(255, 215, 64, 0.1);
+                border-color: rgba(255, 215, 64, 0.3);
+                color: var(--yellow);
+            }
+            .estado-badge.sin-configurar .dot {
+                background: var(--yellow);
+            }
+
+            .estado-badge.error {
+                background: rgba(255, 82, 82, 0.1);
+                border-color: rgba(255, 82, 82, 0.3);
+                color: var(--red);
+            }
+            .estado-badge.error .dot {
+                background: var(--red);
+            }
+
+            @keyframes pulse {
+                0%,
+                100% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0.3;
+                }
+            }
+
+            /* ── Sede config strip ── */
+            .sede-strip {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 10px 20px;
+                background: var(--surface);
+                border-bottom: 1px solid var(--border);
+                flex-shrink: 0;
+            }
+
+            .sede-label {
+                font-size: 11px;
+                color: var(--muted);
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                white-space: nowrap;
+            }
+
+            .sede-input {
+                flex: 1;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 6px 10px;
+                color: var(--text);
+                font-family: var(--font-mono);
+                font-size: 12px;
+                outline: none;
+                transition: border-color 0.2s;
+                max-width: 340px;
+            }
+
+            .sede-input:focus {
+                border-color: var(--purple);
+            }
+            .sede-input::placeholder {
+                color: var(--muted);
+            }
+
+            .btn-guardar {
+                padding: 6px 16px;
+                background: var(--purple);
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 11px;
+                font-weight: 700;
+                cursor: pointer;
+                transition:
+                    background 0.2s,
+                    transform 0.1s;
+                letter-spacing: 0.3px;
+                white-space: nowrap;
+            }
+
+            .btn-guardar:hover {
+                background: #7c1aff;
+            }
+            .btn-guardar:active {
+                transform: scale(0.97);
+            }
+
+            /* ── Stats bar ── */
+            .stats-bar {
+                display: flex;
+                gap: 0;
+                background: var(--surface);
+                border-bottom: 1px solid var(--border);
+                flex-shrink: 0;
+            }
+
+            .stat {
+                flex: 1;
+                padding: 8px 16px;
+                border-right: 1px solid var(--border);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .stat:last-child {
+                border-right: none;
+            }
+
+            .stat-icon {
+                font-size: 14px;
+            }
+            .stat-info {
+                display: flex;
+                flex-direction: column;
+            }
+            .stat-value {
+                font-size: 15px;
+                font-weight: 800;
+                line-height: 1;
+            }
+            .stat-label {
+                font-size: 9px;
+                color: var(--muted);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-top: 1px;
+            }
+
+            /* ── Log area ── */
+            .log-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 8px 20px 6px;
+                flex-shrink: 0;
+            }
+
+            .log-title {
+                font-size: 10px;
+                color: var(--muted);
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                font-weight: 700;
+            }
+
+            .btn-clear {
+                background: none;
+                border: none;
+                color: var(--muted);
+                font-size: 10px;
+                cursor: pointer;
+                padding: 2px 6px;
+                border-radius: 4px;
+                transition:
+                    color 0.2s,
+                    background 0.2s;
+            }
+            .btn-clear:hover {
+                color: var(--text);
+                background: var(--border);
+            }
+
+            .log-container {
+                flex: 1;
+                overflow-y: auto;
+                padding: 0 20px 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .log-container::-webkit-scrollbar {
+                width: 4px;
+            }
+            .log-container::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            .log-container::-webkit-scrollbar-thumb {
+                background: var(--border);
+                border-radius: 2px;
+            }
+
+            .log-entry {
+                display: flex;
+                align-items: flex-start;
+                gap: 10px;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-family: var(--font-mono);
+                font-size: 11.5px;
+                line-height: 1.5;
+                animation: fadeIn 0.2s ease;
+            }
+            .log-entry:hover {
+                background: rgba(255, 255, 255, 0.03);
+            }
+
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(4px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            .log-hora {
+                color: var(--muted);
+                flex-shrink: 0;
+                font-size: 10.5px;
+                margin-top: 1px;
+            }
+
+            .log-icon {
+                flex-shrink: 0;
+                font-size: 12px;
+                margin-top: 1px;
+            }
+
+            .log-msg {
+                color: var(--text);
+                word-break: break-all;
+            }
+
+            .log-entry.ok .log-icon {
+                color: var(--green);
+            }
+            .log-entry.error .log-icon {
+                color: var(--red);
+            }
+            .log-entry.warn .log-icon {
+                color: var(--yellow);
+            }
+            .log-entry.info .log-icon {
+                color: var(--blue);
+            }
+
+            .log-entry.ok .log-msg {
+                color: #c8f5dc;
+            }
+            .log-entry.error .log-msg {
+                color: #ffc5c5;
+            }
+            .log-entry.warn .log-msg {
+                color: #fff3c4;
+            }
+            .log-entry.info .log-msg {
+                color: #cceeff;
+            }
+
+            /* ── Empty state ── */
+            .log-empty {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                color: var(--muted);
+                gap: 6px;
+                padding-bottom: 40px;
+            }
+            .log-empty-icon {
+                font-size: 28px;
+                opacity: 0.3;
+            }
+            .log-empty-text {
+                font-size: 12px;
+            }
+
+            /* ── Footer ── */
+            .footer {
+                padding: 6px 20px;
+                border-top: 1px solid var(--border);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                flex-shrink: 0;
+            }
+            .footer-left {
+                font-size: 10px;
+                color: var(--muted);
+            }
+            .footer-right {
+                font-size: 10px;
+                color: var(--muted);
+            }
+            .footer-version {
+                color: var(--purple);
+                font-weight: 700;
+            }
+        </style>
+    </head>
+    <body>
+        <!-- Titlebar -->
+        <div class="titlebar">
+            <div class="titlebar-logo">T</div>
+            <div>
+                <div class="titlebar-name">Tastica Print Agent</div>
+                <div class="titlebar-sub">Agente de impresión de comandas</div>
+            </div>
+            <div class="estado-badge iniciando" id="estadoBadge">
+                <div class="dot"></div>
+                <span id="estadoTexto">Iniciando...</span>
+            </div>
+        </div>
+
+        <!-- Sede config -->
+        <div class="sede-strip">
+            <span class="sede-label">ID Seguridad</span>
+            <input
+                class="sede-input"
+                id="inputSede"
+                type="text"
+                placeholder="Pega aquí tu ID de Seguridad de sede..."
+                spellcheck="false"
+            />
+            <button class="btn-guardar" id="btnGuardar">Guardar y conectar</button>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-bar">
+            <div class="stat">
+                <div class="stat-icon">🖨️</div>
+                <div class="stat-info">
+                    <div class="stat-value" id="statImpresiones">0</div>
+                    <div class="stat-label">Impresiones</div>
+                </div>
+            </div>
+            <div class="stat">
+                <div class="stat-icon">✅</div>
+                <div class="stat-info">
+                    <div class="stat-value" id="statOk">0</div>
+                    <div class="stat-label">Exitosas</div>
+                </div>
+            </div>
+            <div class="stat">
+                <div class="stat-icon">❌</div>
+                <div class="stat-info">
+                    <div class="stat-value" id="statError" style="color: var(--red)">0</div>
+                    <div class="stat-label">Errores</div>
+                </div>
+            </div>
+            <div class="stat">
+                <div class="stat-icon">🕐</div>
+                <div class="stat-info">
+                    <div class="stat-value" id="statUptime">00:00</div>
+                    <div class="stat-label">Activo</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log header -->
+        <div class="log-header">
+            <span class="log-title">📋 Registro de actividad</span>
+            <button class="btn-clear" id="btnClear">Limpiar</button>
+        </div>
+
+        <!-- Log container -->
+        <div class="log-container" id="logContainer">
+            <div class="log-empty" id="logEmpty">
+                <div class="log-empty-icon">📄</div>
+                <div class="log-empty-text">El registro aparecerá aquí</div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <span class="footer-left" id="footerSede">Sin sede configurada</span>
+            <span class="footer-right">v1.0.0 · <span class="footer-version">Tastica</span></span>
+        </div>
+
+        <script>
+            const ICONS = { ok: "✓", error: "✗", warn: "⚠", info: "●" };
+
+            let contImpresiones = 0;
+            let contOk = 0;
+            let contError = 0;
+            let startTime = Date.now();
+
+            // ── Uptime ──
+            setInterval(() => {
+                const s = Math.floor((Date.now() - startTime) / 1000);
+                const m = Math.floor(s / 60)
+                    .toString()
+                    .padStart(2, "0");
+                const ss = (s % 60).toString().padStart(2, "0");
+                document.getElementById("statUptime").textContent = m + ":" + ss;
+            }, 1000);
+
+            // ── Estado ──
+            const ESTADO_LABELS = {
+                iniciando: "Iniciando...",
+                conectado: "Conectado",
+                "sin-configurar": "Sin configurar",
+                error: "Error"
+            };
+
+            window.tastica.onEstado(estado => {
+                const badge = document.getElementById("estadoBadge");
+                const texto = document.getElementById("estadoTexto");
+                badge.className = "estado-badge " + estado;
+                texto.textContent = ESTADO_LABELS[estado] || estado;
+            });
+
+            // ── Logs ──
+            window.tastica.onLog(({ tipo, mensaje, hora }) => {
+                const container = document.getElementById("logContainer");
+                const empty = document.getElementById("logEmpty");
+                if (empty) empty.remove();
+
+                // stats
+                if (tipo === "ok") {
+                    contOk++;
+                    document.getElementById("statOk").textContent = contOk;
+                    if (mensaje.toLowerCase().includes("impreso") || mensaje.includes("→")) {
+                        contImpresiones++;
+                        document.getElementById("statImpresiones").textContent = contImpresiones;
+                    }
+                }
+                if (tipo === "error") {
+                    contError++;
+                    document.getElementById("statError").textContent = contError;
+                }
+
+                const entry = document.createElement("div");
+                entry.className = "log-entry " + tipo;
+                entry.innerHTML = `
+      <span class="log-hora">${hora}</span>
+      <span class="log-icon">${ICONS[tipo] || "·"}</span>
+      <span class="log-msg">${mensaje}</span>
+    `;
+                container.appendChild(entry);
+
+                // auto-scroll
+                container.scrollTop = container.scrollHeight;
+
+                // máx 200 entradas
+                const entries = container.querySelectorAll(".log-entry");
+                if (entries.length > 200) entries[0].remove();
+            });
+
+            // ── Cargar sede guardada ──
+            window.tastica.leerConfig().then(config => {
+                if (config && config.id_sede) {
+                    document.getElementById("inputSede").value = config.id_sede;
+                    document.getElementById("footerSede").textContent = "Sede: " + config.id_sede;
+                }
+            });
+
+            // ── Guardar sede ──
+            document.getElementById("btnGuardar").addEventListener("click", async () => {
+                const id = document.getElementById("inputSede").value.trim();
+                if (!id) return;
+                const btn = document.getElementById("btnGuardar");
+                btn.textContent = "Guardando...";
+                btn.disabled = true;
+                const res = await window.tastica.guardarSede(id);
+                btn.textContent = "Guardar y conectar";
+                btn.disabled = false;
+                if (res.ok) {
+                    document.getElementById("footerSede").textContent = "Sede: " + id;
+                }
+            });
+
+            document.getElementById("inputSede").addEventListener("keydown", e => {
+                if (e.key === "Enter") document.getElementById("btnGuardar").click();
+            });
+
+            // ── Limpiar logs ──
+            document.getElementById("btnClear").addEventListener("click", () => {
+                const container = document.getElementById("logContainer");
+                container.innerHTML = `
+      <div class="log-empty" id="logEmpty">
+        <div class="log-empty-icon">📄</div>
+        <div class="log-empty-text">El registro aparecerá aquí</div>
+      </div>`;
+                contImpresiones = 0;
+                contOk = 0;
+                contError = 0;
+                document.getElementById("statImpresiones").textContent = 0;
+                document.getElementById("statOk").textContent = 0;
+                document.getElementById("statError").textContent = 0;
+            });
+        </script>
+    </body>
+</html>
