@@ -21,7 +21,7 @@ jobs:
               working-directory: .
 
             - name: Build Windows
-              run: npm run dist:win
+              run: npm run dist:win -- --publish never
               working-directory: .
 
             - name: Upload .exe
@@ -45,7 +45,7 @@ jobs:
               working-directory: .
 
             - name: Build Mac
-              run: npm run dist:mac
+              run: npm run dist:mac -- --publish never
               working-directory: .
 
             - name: Upload .dmg
@@ -69,7 +69,7 @@ jobs:
               working-directory: .
 
             - name: Build Linux
-              run: npm run dist:linux
+              run: npm run dist:linux -- --publish never
               working-directory: .
 
             - name: Upload .AppImage
