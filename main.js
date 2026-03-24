@@ -1,4 +1,9 @@
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
+
+if (process.platform === "linux") {
+    app.commandLine.appendSwitch("no-sandbox");
+}
+
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -51,7 +56,6 @@ app.on("window-all-closed", () => {
     app.quit();
 });
 
-// ─── Enviar log a la ventana ──────────────────────────────────────────────────
 function sendLog(tipo, mensaje) {
     if (mainWindow) {
         mainWindow.webContents.send("log", {
