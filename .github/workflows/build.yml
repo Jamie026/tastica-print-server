@@ -2,8 +2,8 @@ name: Build Tastica Print Agent
 
 on:
     push:
-        branches: [main]
-    workflow_dispatch: # permite ejecutarlo manualmente desde GitHub
+        branches: [main, master]
+    workflow_dispatch:
 
 jobs:
     build-windows:
@@ -14,21 +14,19 @@ jobs:
             - name: Setup Node.js
               uses: actions/setup-node@v4
               with:
-                  node-version: 18
+                  node-version: 24
 
             - name: Install dependencies
               run: npm install
-              working-directory: .
 
             - name: Build Windows
               run: npm run dist:win -- --publish never
-              working-directory: .
 
             - name: Upload .exe
               uses: actions/upload-artifact@v4
               with:
                   name: windows-exe
-                  path: tastica-print-server/dist/*.exe
+                  path: dist/*.exe
 
     build-mac:
         runs-on: macos-latest
@@ -38,21 +36,19 @@ jobs:
             - name: Setup Node.js
               uses: actions/setup-node@v4
               with:
-                  node-version: 18
+                  node-version: 24
 
             - name: Install dependencies
               run: npm install
-              working-directory: .
 
             - name: Build Mac
               run: npm run dist:mac -- --publish never
-              working-directory: .
 
             - name: Upload .dmg
               uses: actions/upload-artifact@v4
               with:
                   name: mac-dmg
-                  path: tastica-print-server/dist/*.dmg
+                  path: dist/*.dmg
 
     build-linux:
         runs-on: ubuntu-latest
@@ -62,18 +58,16 @@ jobs:
             - name: Setup Node.js
               uses: actions/setup-node@v4
               with:
-                  node-version: 18
+                  node-version: 24
 
             - name: Install dependencies
               run: npm install
-              working-directory: .
 
             - name: Build Linux
               run: npm run dist:linux -- --publish never
-              working-directory: .
 
             - name: Upload .AppImage
               uses: actions/upload-artifact@v4
               with:
                   name: linux-appimage
-                  path: tastica-print-server/dist/*.AppImage
+                  path: dist/*.AppImage
