@@ -37,7 +37,6 @@
                 user-select: none;
             }
 
-            /* ── Titlebar ── */
             .titlebar {
                 display: flex;
                 align-items: center;
@@ -75,7 +74,6 @@
                 color: var(--muted);
             }
 
-            /* ── Estado badge ── */
             .estado-badge {
                 margin-left: auto;
                 display: flex;
@@ -146,7 +144,6 @@
                 }
             }
 
-            /* ── Sede config strip ── */
             .sede-strip {
                 display: flex;
                 align-items: center;
@@ -210,7 +207,6 @@
                 transform: scale(0.97);
             }
 
-            /* ── Stats bar ── */
             .stats-bar {
                 display: flex;
                 gap: 0;
@@ -251,7 +247,6 @@
                 margin-top: 1px;
             }
 
-            /* ── Log area ── */
             .log-header {
                 display: flex;
                 align-items: center;
@@ -337,13 +332,11 @@
                 font-size: 10.5px;
                 margin-top: 1px;
             }
-
             .log-icon {
                 flex-shrink: 0;
                 font-size: 12px;
                 margin-top: 1px;
             }
-
             .log-msg {
                 color: var(--text);
                 word-break: break-all;
@@ -375,7 +368,6 @@
                 color: #cceeff;
             }
 
-            /* ── Empty state ── */
             .log-empty {
                 flex: 1;
                 display: flex;
@@ -394,7 +386,6 @@
                 font-size: 12px;
             }
 
-            /* ── Footer ── */
             .footer {
                 padding: 6px 20px;
                 border-top: 1px solid var(--border);
@@ -418,7 +409,6 @@
         </style>
     </head>
     <body>
-        <!-- Titlebar -->
         <div class="titlebar">
             <div class="titlebar-logo">T</div>
             <div>
@@ -431,7 +421,6 @@
             </div>
         </div>
 
-        <!-- Sede config -->
         <div class="sede-strip">
             <span class="sede-label">ID Seguridad</span>
             <input
@@ -444,7 +433,6 @@
             <button class="btn-guardar" id="btnGuardar">Guardar y conectar</button>
         </div>
 
-        <!-- Stats -->
         <div class="stats-bar">
             <div class="stat">
                 <div class="stat-icon">🖨️</div>
@@ -476,13 +464,11 @@
             </div>
         </div>
 
-        <!-- Log header -->
         <div class="log-header">
             <span class="log-title">📋 Registro de actividad</span>
             <button class="btn-clear" id="btnClear">Limpiar</button>
         </div>
 
-        <!-- Log container -->
         <div class="log-container" id="logContainer">
             <div class="log-empty" id="logEmpty">
                 <div class="log-empty-icon">📄</div>
@@ -490,7 +476,6 @@
             </div>
         </div>
 
-        <!-- Footer -->
         <div class="footer">
             <span class="footer-left" id="footerSede">Sin sede configurada</span>
             <span class="footer-right">v1.0.0 · <span class="footer-version">Tastica</span></span>
@@ -498,14 +483,12 @@
 
         <script>
             const ICONS = { ok: "✓", error: "✗", warn: "⚠", info: "●" };
-
             let contImpresiones = 0;
             let contOk = 0;
             let contError = 0;
             let startTime = Date.now();
 
-            // ── Uptime ──
-            setInterval(() => {
+            setInterval(function () {
                 const s = Math.floor((Date.now() - startTime) / 1000);
                 const m = Math.floor(s / 60)
                     .toString()
@@ -514,7 +497,6 @@
                 document.getElementById("statUptime").textContent = m + ":" + ss;
             }, 1000);
 
-            // ── Estado ──
             const ESTADO_LABELS = {
                 iniciando: "Iniciando...",
                 conectado: "Conectado",
@@ -522,24 +504,28 @@
                 error: "Error"
             };
 
-            window.tastica.onEstado(estado => {
+            window.tastica.onEstado(function (estado) {
                 const badge = document.getElementById("estadoBadge");
                 const texto = document.getElementById("estadoTexto");
                 badge.className = "estado-badge " + estado;
                 texto.textContent = ESTADO_LABELS[estado] || estado;
             });
 
-            // ── Logs ──
-            window.tastica.onLog(({ tipo, mensaje, hora }) => {
+            window.tastica.onLog(function (data) {
+                const tipo = data.tipo;
+                const mensaje = data.mensaje;
+                const hora = data.hora;
                 const container = document.getElementById("logContainer");
                 const empty = document.getElementById("logEmpty");
                 if (empty) empty.remove();
 
-                // stats
                 if (tipo === "ok") {
                     contOk++;
                     document.getElementById("statOk").textContent = contOk;
-                    if (mensaje.toLowerCase().includes("impreso") || mensaje.includes("→")) {
+                    if (
+                        mensaje.toLowerCase().indexOf("impreso") !== -1 ||
+                        mensaje.indexOf("→") !== -1
+                    ) {
                         contImpresiones++;
                         document.getElementById("statImpresiones").textContent = contImpresiones;
                     }
@@ -551,31 +537,31 @@
 
                 const entry = document.createElement("div");
                 entry.className = "log-entry " + tipo;
-                entry.innerHTML = `
-      <span class="log-hora">${hora}</span>
-      <span class="log-icon">${ICONS[tipo] || "·"}</span>
-      <span class="log-msg">${mensaje}</span>
-    `;
+                entry.innerHTML =
+                    '<span class="log-hora">' +
+                    hora +
+                    "</span>" +
+                    '<span class="log-icon">' +
+                    (ICONS[tipo] || "·") +
+                    "</span>" +
+                    '<span class="log-msg">' +
+                    mensaje +
+                    "</span>";
                 container.appendChild(entry);
-
-                // auto-scroll
                 container.scrollTop = container.scrollHeight;
 
-                // máx 200 entradas
                 const entries = container.querySelectorAll(".log-entry");
                 if (entries.length > 200) entries[0].remove();
             });
 
-            // ── Cargar sede guardada ──
-            window.tastica.leerConfig().then(config => {
+            window.tastica.leerConfig().then(function (config) {
                 if (config && config.id_sede) {
                     document.getElementById("inputSede").value = config.id_sede;
                     document.getElementById("footerSede").textContent = "Sede: " + config.id_sede;
                 }
             });
 
-            // ── Guardar sede ──
-            document.getElementById("btnGuardar").addEventListener("click", async () => {
+            document.getElementById("btnGuardar").addEventListener("click", async function () {
                 const id = document.getElementById("inputSede").value.trim();
                 if (!id) return;
                 const btn = document.getElementById("btnGuardar");
@@ -589,18 +575,17 @@
                 }
             });
 
-            document.getElementById("inputSede").addEventListener("keydown", e => {
+            document.getElementById("inputSede").addEventListener("keydown", function (e) {
                 if (e.key === "Enter") document.getElementById("btnGuardar").click();
             });
 
-            // ── Limpiar logs ──
-            document.getElementById("btnClear").addEventListener("click", () => {
+            document.getElementById("btnClear").addEventListener("click", function () {
                 const container = document.getElementById("logContainer");
-                container.innerHTML = `
-      <div class="log-empty" id="logEmpty">
-        <div class="log-empty-icon">📄</div>
-        <div class="log-empty-text">El registro aparecerá aquí</div>
-      </div>`;
+                container.innerHTML =
+                    '<div class="log-empty" id="logEmpty">' +
+                    '<div class="log-empty-icon">📄</div>' +
+                    '<div class="log-empty-text">El registro aparecerá aquí</div>' +
+                    "</div>";
                 contImpresiones = 0;
                 contOk = 0;
                 contError = 0;

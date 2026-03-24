@@ -1,15 +1,20 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
-
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const axios = require("axios");
+const escpos = require("escpos");
+escpos.Network = require("escpos-network");
+const { exec } = require("child_process");
 
 const CONFIG_FILE = path.join(app.getPath("userData"), "config_tastica.json");
+const API_URL = "https://servidor-356lq.ondigitalocean.app";
+const PUERTO_IMPRESORA = 9100;
 
 let mainWindow = null;
 let agenteLoop = null;
+let buscando = false;
 
-// ─── Crear ventana ────────────────────────────────────────────────────────────
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 780,
@@ -55,8 +60,8 @@ app.on("window-all-closed", () => {
 function sendLog(tipo, mensaje) {
     if (mainWindow) {
         mainWindow.webContents.send("log", {
-            tipo,
-            mensaje,
+            tipo: tipo,
+            mensaje: mensaje,
             hora: new Date().toLocaleTimeString()
         });
     }
@@ -68,10 +73,9 @@ function sendEstado(estado) {
     }
 }
 
-// ─── IPC: guardar sede desde renderer ────────────────────────────────────────
 ipcMain.handle("guardar-sede", async (_, id_sede) => {
     try {
-        fs.writeFileSync(CONFIG_FILE, JSON.stringify({ id_sede }, null, 4));
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify({ id_sede: id_sede }, null, 4));
         sendLog("ok", "Sede guardada: " + id_sede);
         if (agenteLoop) clearInterval(agenteLoop);
         arrancarBucle(id_sede);
@@ -88,20 +92,10 @@ ipcMain.handle("leer-config", async () => {
             return data;
         }
         return null;
-    } catch {
+    } catch (e) {
         return null;
     }
 });
-
-// ─── Lógica del agente ────────────────────────────────────────────────────────
-const axios = require("axios");
-const escpos = require("escpos");
-escpos.Network = require("escpos-network");
-const { exec } = require("child_process");
-
-const API_URL = "https://servidor-356lq.ondigitalocean.app";
-const PUERTO_IMPRESORA = 9100;
-let buscando = false;
 
 async function iniciarAgente() {
     sendEstado("iniciando");
@@ -139,14 +133,12 @@ function arrancarBucle(id_sede) {
                 sendLog("warn", "No se pudo obtener config de impresoras");
             }
 
-            const [resMesas, resDeliveries] = await Promise.all([
-                axios
-                    .get(API_URL + "/pedidos-linea/impresion-pendiente/" + id_sede)
-                    .catch(() => ({ data: [] })),
-                axios
-                    .get(API_URL + "/deliveries/impresion-pendiente/" + id_sede)
-                    .catch(() => ({ data: [] }))
-            ]);
+            const resMesas = await axios
+                .get(API_URL + "/pedidos-linea/impresion-pendiente/" + id_sede)
+                .catch(() => ({ data: [] }));
+            const resDeliveries = await axios
+                .get(API_URL + "/deliveries/impresion-pendiente/" + id_sede)
+                .catch(() => ({ data: [] }));
 
             const mesas = resMesas.data;
             const deliveries = resDeliveries.data;
@@ -154,7 +146,11 @@ function arrancarBucle(id_sede) {
             if (mesas.length > 0 || deliveries.length > 0) {
                 sendLog(
                     "info",
-                    `Procesando: ${mesas.length} mesa(s), ${deliveries.length} delivery(s)`
+                    "Procesando: " +
+                        mesas.length +
+                        " mesa(s), " +
+                        deliveries.length +
+                        " delivery(s)"
                 );
             }
 
@@ -185,8 +181,8 @@ async function procesarPedidosArray(pedidosArray, configImpresoras, tipo, id_sed
         }
 
         const items = typeof datosImprimir === "string" ? JSON.parse(datosImprimir) : datosImprimir;
-
         const grupos = {};
+
         items.forEach(p => {
             const cat = p.categoria || "Otros";
             if (!grupos[cat]) grupos[cat] = [];
@@ -199,7 +195,7 @@ async function procesarPedidosArray(pedidosArray, configImpresoras, tipo, id_sed
             const impresoraInfo = configImpresoras[categoria];
 
             if (!impresoraInfo) {
-                sendLog("warn", `Sin impresora para categoría: ${categoria}`);
+                sendLog("warn", "Sin impresora para categoría: " + categoria);
                 continue;
             }
 
@@ -211,10 +207,13 @@ async function procesarPedidosArray(pedidosArray, configImpresoras, tipo, id_sed
                 } else {
                     await imprimirPorRed(pedido, tipo, categoria, itemsCat, conexion);
                 }
-                sendLog("ok", `${categoria} → ${tipoConexion.toUpperCase()} (${conexion})`);
+                sendLog(
+                    "ok",
+                    categoria + " → " + tipoConexion.toUpperCase() + " (" + conexion + ")"
+                );
             } catch (err) {
                 exitoGeneral = false;
-                sendLog("error", `Error en ${categoria} (${conexion}): ${err.message}`);
+                sendLog("error", "Error en " + categoria + " (" + conexion + "): " + err.message);
             }
         }
 
@@ -232,7 +231,6 @@ async function procesarPedidosArray(pedidosArray, configImpresoras, tipo, id_sed
     }
 }
 
-// ─── Imprimir por red ─────────────────────────────────────────────────────────
 function imprimirPorRed(pedido, tipo, categoria, items, ip) {
     return new Promise((resolve, reject) => {
         const device = new escpos.Network(ip, PUERTO_IMPRESORA);
@@ -251,7 +249,6 @@ function imprimirPorRed(pedido, tipo, categoria, items, ip) {
     });
 }
 
-// ─── Imprimir por USB ─────────────────────────────────────────────────────────
 function imprimirPorUSB(pedido, tipo, categoria, items, nombreImpresora) {
     return new Promise((resolve, reject) => {
         const lineas = generarLineasTicket(pedido, tipo, categoria, items);
@@ -261,12 +258,12 @@ function imprimirPorUSB(pedido, tipo, categoria, items, nombreImpresora) {
 
         const comando =
             os.platform() === "win32"
-                ? `copy /B "${tmpFile}" "${nombreImpresora}"`
-                : `lp -d "${nombreImpresora}" "${tmpFile}"`;
+                ? 'copy /B "' + tmpFile + '" "' + nombreImpresora + '"'
+                : 'lp -d "' + nombreImpresora + '" "' + tmpFile + '"';
 
         exec(comando, err => {
             fs.unlink(tmpFile, () => {});
-            if (err) return reject(new Error(`Error USB "${nombreImpresora}": ${err.message}`));
+            if (err) return reject(new Error("Error USB " + nombreImpresora + ": " + err.message));
             resolve();
         });
     });
@@ -291,7 +288,7 @@ function generarLineasTicket(pedido, tipo, categoria, items) {
     let subtotal = 0;
     items.forEach(p => {
         lineas.push(p.cantidad + "x " + p.nombre);
-        if (p.variaciones_seleccionadas?.length > 0) {
+        if (p.variaciones_seleccionadas && p.variaciones_seleccionadas.length > 0) {
             const agrupadas = p.variaciones_seleccionadas.reduce((acc, v) => {
                 if (!acc[v.grupo]) acc[v.grupo] = [];
                 acc[v.grupo].push(v.opcion);
@@ -334,7 +331,7 @@ function construirTicket(printer, pedido, tipo, categoria, items) {
     let subtotal = 0;
     items.forEach(p => {
         printer.text(p.cantidad + "x " + p.nombre);
-        if (p.variaciones_seleccionadas?.length > 0) {
+        if (p.variaciones_seleccionadas && p.variaciones_seleccionadas.length > 0) {
             const agrupadas = p.variaciones_seleccionadas.reduce((acc, v) => {
                 if (!acc[v.grupo]) acc[v.grupo] = [];
                 acc[v.grupo].push(v.opcion);
