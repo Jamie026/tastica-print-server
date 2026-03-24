@@ -24,6 +24,7 @@
         "appId": "com.tastica.printagent",
         "productName": "Tastica Print Agent",
         "icon": "assets/icon",
+        "afterPack": "./afterPack.js",
         "files": [
             "main.js",
             "preload.js",
@@ -42,10 +43,7 @@
         "linux": {
             "target": "AppImage",
             "icon": "assets/icon.png",
-            "category": "Utility",
-            "executableArgs": [
-                "--no-sandbox"
-            ]
+            "category": "Utility"
         },
         "nsis": {
             "oneClick": true,
