@@ -130,7 +130,11 @@ function arrancarBucle(id_sede) {
                 const resConfig = await axios.get(API_URL + "/sedes/config-impresion/" + id_sede);
                 configImpresoras = resConfig.data.impresoras || {};
             } catch (e) {
-                sendLog("warn", "No se pudo obtener config de impresoras");
+                sendLog(
+                    "warn",
+                    "No se pudo obtener config de impresoras: " +
+                        (e.response?.status + ": " + e.message)
+                );
             }
 
             const resMesas = await axios
