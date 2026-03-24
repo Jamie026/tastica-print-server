@@ -40,7 +40,12 @@ function createWindow() {
     });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+    if (process.platform === "linux") {
+        app.commandLine.appendSwitch("no-sandbox");
+    }
+    createWindow();
+});
 
 app.on("window-all-closed", () => {
     app.quit();
