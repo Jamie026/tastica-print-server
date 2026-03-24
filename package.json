@@ -42,7 +42,10 @@
         "linux": {
             "target": "AppImage",
             "icon": "assets/icon.png",
-            "category": "Utility"
+            "category": "Utility",
+            "executableArgs": [
+                "--no-sandbox"
+            ]
         },
         "nsis": {
             "oneClick": true,
