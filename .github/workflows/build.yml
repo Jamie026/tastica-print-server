@@ -18,11 +18,11 @@ jobs:
 
             - name: Install dependencies
               run: npm install
-              working-directory: tastica-print-server
+              working-directory: .
 
             - name: Build Windows
               run: npm run dist:win
-              working-directory: tastica-print-server
+              working-directory: .
 
             - name: Upload .exe
               uses: actions/upload-artifact@v4
@@ -42,11 +42,11 @@ jobs:
 
             - name: Install dependencies
               run: npm install
-              working-directory: tastica-print-server
+              working-directory: .
 
             - name: Build Mac
               run: npm run dist:mac
-              working-directory: tastica-print-server
+              working-directory: .
 
             - name: Upload .dmg
               uses: actions/upload-artifact@v4
@@ -66,11 +66,11 @@ jobs:
 
             - name: Install dependencies
               run: npm install
-              working-directory: tastica-print-server
+              working-directory: .
 
             - name: Build Linux
               run: npm run dist:linux
-              working-directory: tastica-print-server
+              working-directory: .
 
             - name: Upload .AppImage
               uses: actions/upload-artifact@v4
