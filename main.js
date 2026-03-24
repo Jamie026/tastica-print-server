@@ -1,8 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
 
-if (process.platform === "linux") {
-    app.commandLine.appendSwitch("no-sandbox");
-}
+app.commandLine.appendSwitch("no-sandbox");
+app.commandLine.appendSwitch("disable-setuid-sandbox");
 
 const path = require("path");
 const fs = require("fs");
