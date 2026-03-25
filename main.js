@@ -265,7 +265,12 @@ function imprimirPorUSB(pedido, tipo, categoria, items, nombreImpresora) {
                 ? 'copy /B "' + tmpFile + '" "' + nombreImpresora + '"'
                 : 'lp -d "' + nombreImpresora + '" "' + tmpFile + '"';
 
-        exec(comando, err => {
+        sendLog("info", "Ejecutando: " + comando); // <-- agrega esto
+
+        exec(comando, (err, stdout, stderr) => {
+            // <-- captura stdout y stderr
+            sendLog("info", "stdout: " + stdout); // <-- agrega esto
+            sendLog("info", "stderr: " + stderr); // <-- agrega esto
             fs.unlink(tmpFile, () => {});
             if (err) return reject(new Error("Error USB " + nombreImpresora + ": " + err.message));
             resolve();
