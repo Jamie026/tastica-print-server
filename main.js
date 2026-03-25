@@ -271,7 +271,6 @@ function imprimirPorUSB(pedido, tipo, categoria, items, nombreImpresora) {
             // <-- captura stdout y stderr
             sendLog("info", "stdout: " + stdout); // <-- agrega esto
             sendLog("info", "stderr: " + stderr); // <-- agrega esto
-            fs.unlink(tmpFile, () => {});
             if (err) return reject(new Error("Error USB " + nombreImpresora + ": " + err.message));
             resolve();
         });
