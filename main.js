@@ -256,21 +256,32 @@ function imprimirPorRed(pedido, tipo, categoria, items, ip) {
 function imprimirPorUSB(pedido, tipo, categoria, items, nombreImpresora) {
     return new Promise((resolve, reject) => {
         const lineas = generarLineasTicket(pedido, tipo, categoria, items);
-        const contenido = lineas.join("\n");
+        const contenido = lineas.join("\r\n");
         const tmpFile = path.join(os.tmpdir(), "tastica_ticket_" + Date.now() + ".txt");
         fs.writeFileSync(tmpFile, contenido, "utf-8");
 
-        const comando =
-            os.platform() === "win32"
-                ? 'print /D:"' + nombreImpresora + '" "' + tmpFile + '"'
-                : 'lp -d "' + nombreImpresora + '" "' + tmpFile + '"';
+        let comando;
+        if (os.platform() === "win32") {
+            const tmpEscapado = tmpFile.replace(/\\/g, "\\\\");
+            comando =
+                `powershell -Command "` +
+                `$raw = [System.IO.File]::ReadAllBytes('${tmpEscapado}'); ` +
+                `$ticket = [System.Text.Encoding]::Default.GetString($raw); ` +
+                `$pd = New-Object System.Drawing.Printing.PrintDocument; ` +
+                `$pd.PrinterSettings.PrinterName = '${nombreImpresora}'; ` +
+                `$pd.DefaultPageSettings.PaperSize = New-Object System.Drawing.Printing.PaperSize('Custom', 300, 1100); ` +
+                `$pd.Add_PrintPage({ param($s, $e) $e.Graphics.DrawString($ticket, (New-Object System.Drawing.Font('Courier New', 9)), [System.Drawing.Brushes]::Black, 0, 0) }); ` +
+                `$pd.Print()"`;
+        } else {
+            comando = `lp -d "${nombreImpresora}" "${tmpFile}"`;
+        }
 
-        sendLog("info", "Ejecutando: " + comando); // <-- agrega esto
+        sendLog("info", "Ejecutando impresión en: " + nombreImpresora);
 
         exec(comando, (err, stdout, stderr) => {
-            // <-- captura stdout y stderr
-            sendLog("info", "stdout: " + stdout); // <-- agrega esto
-            sendLog("info", "stderr: " + stderr); // <-- agrega esto
+            if (stdout) sendLog("info", "stdout: " + stdout);
+            if (stderr) sendLog("warn", "stderr: " + stderr);
+            fs.unlink(tmpFile, () => {});
             if (err) return reject(new Error("Error USB " + nombreImpresora + ": " + err.message));
             resolve();
         });
