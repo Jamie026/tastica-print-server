@@ -257,39 +257,59 @@ function imprimirPorUSB(pedido, tipo, categoria, items, nombreImpresora) {
     return new Promise((resolve, reject) => {
         const lineas = generarLineasTicket(pedido, tipo, categoria, items);
         const contenido = lineas.join("\r\n");
-        const tmpFile = path.join(os.tmpdir(), "tastica_ticket_" + Date.now() + ".txt");
+        const timestamp = Date.now();
+        const tmpFile = path.join(os.tmpdir(), "tastica_ticket_" + timestamp + ".txt");
+        const vbsFile = path.join(os.tmpdir(), "tastica_print_" + timestamp + ".vbs");
+
         fs.writeFileSync(tmpFile, contenido, "utf-8");
 
         if (os.platform() === "win32") {
-            const cmdEstablecer = `rundll32 printui.dll,PrintUIEntry /y /n "${nombreImpresora}"`;
-            exec(cmdEstablecer, errSet => {
-                if (errSet)
-                    sendLog(
-                        "warn",
-                        "No se pudo establecer impresora predeterminada: " + errSet.message
-                    );
+            const tmpEscapado = tmpFile.replace(/\\/g, "\\\\");
+            const vbsScript =
+                "Dim oShell, oReg\r\n" +
+                'Set oShell = CreateObject("WScript.Shell")\r\n' +
+                'Set oReg = CreateObject("WScript.Shell")\r\n' +
+                'oReg.RegWrite "HKCU\\Software\\Microsoft\\Notepad\\iMarginTop", 0, "REG_DWORD"\r\n' +
+                'oReg.RegWrite "HKCU\\Software\\Microsoft\\Notepad\\iMarginBottom", 0, "REG_DWORD"\r\n' +
+                'oReg.RegWrite "HKCU\\Software\\Microsoft\\Notepad\\iMarginLeft", 0, "REG_DWORD"\r\n' +
+                'oReg.RegWrite "HKCU\\Software\\Microsoft\\Notepad\\iMarginRight", 0, "REG_DWORD"\r\n' +
+                'oReg.RegWrite "HKCU\\Software\\Microsoft\\Notepad\\szHeader", "", "REG_SZ"\r\n' +
+                'oReg.RegWrite "HKCU\\Software\\Microsoft\\Notepad\\szTrailer", "", "REG_SZ"\r\n' +
+                'oShell.Run "rundll32 printui.dll,PrintUIEntry /y /n ""' +
+                nombreImpresora +
+                '""", 0, True\r\n' +
+                'oShell.Run "notepad /p ""' +
+                tmpEscapado +
+                '""", 0, True\r\n' +
+                "WScript.Sleep 4000\r\n";
 
-                const cmdImprimir = `notepad /p "${tmpFile}"`;
-                sendLog("info", "Imprimiendo via notepad: " + tmpFile);
+            fs.writeFileSync(vbsFile, vbsScript, "utf-8");
 
-                exec(cmdImprimir, (err, stdout, stderr) => {
-                    setTimeout(() => fs.unlink(tmpFile, () => {}), 5000);
+            exec('cscript //nologo "' + vbsFile + '"', function (err, stdout, stderr) {
+                if (stdout) sendLog("info", "stdout: " + stdout);
+                if (stderr) sendLog("warn", "stderr: " + stderr);
+                setTimeout(function () {
+                    fs.unlink(tmpFile, function () {});
+                    fs.unlink(vbsFile, function () {});
+                }, 8000);
+                if (err)
+                    return reject(new Error("Error USB " + nombreImpresora + ": " + err.message));
+                resolve();
+            });
+        } else {
+            exec(
+                'lp -d "' + nombreImpresora + '" "' + tmpFile + '"',
+                function (err, stdout, stderr) {
+                    if (stdout) sendLog("info", "stdout: " + stdout);
+                    if (stderr) sendLog("warn", "stderr: " + stderr);
+                    fs.unlink(tmpFile, function () {});
                     if (err)
                         return reject(
                             new Error("Error USB " + nombreImpresora + ": " + err.message)
                         );
                     resolve();
-                });
-            });
-        } else {
-            exec(`lp -d "${nombreImpresora}" "${tmpFile}"`, (err, stdout, stderr) => {
-                if (stdout) sendLog("info", "stdout: " + stdout);
-                if (stderr) sendLog("warn", "stderr: " + stderr);
-                fs.unlink(tmpFile, () => {});
-                if (err)
-                    return reject(new Error("Error USB " + nombreImpresora + ": " + err.message));
-                resolve();
-            });
+                }
+            );
         }
     });
 }
