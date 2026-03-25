@@ -51,23 +51,29 @@ jobs:
                   path: dist/*.dmg
 
     build-linux:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v4
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 24
+        - name: Setup Node.js
+          uses: actions/setup-node@v4
+          with:
+              node-version: 24
 
-            - name: Install dependencies
-              run: npm install
+        - name: Install dependencies
+          run: npm install
 
-            - name: Build Linux
-              run: npm run dist:linux -- --publish never
+        - name: Build Linux
+          run: npm run dist:linux -- --publish never
 
-            - name: Upload .AppImage
-              uses: actions/upload-artifact@v4
-              with:
-                  name: linux-appimage
-                  path: dist/*.AppImage
+        - name: Dar permisos y empaquetar
+          run: |
+              chmod +x dist/*.AppImage
+              cd dist
+              tar -czf TasticaPrintAgent-linux.tar.gz *.AppImage
+
+        - name: Upload .tar.gz
+          uses: actions/upload-artifact@v4
+          with:
+              name: linux-appimage
+              path: dist/TasticaPrintAgent-linux.tar.gz
