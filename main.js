@@ -262,7 +262,7 @@ function imprimirPorUSB(pedido, tipo, categoria, items, nombreImpresora) {
 
         const comando =
             os.platform() === "win32"
-                ? 'copy /B "' + tmpFile + '" "' + nombreImpresora + '"'
+                ? 'print /D:"' + nombreImpresora + '" "' + tmpFile + '"'
                 : 'lp -d "' + nombreImpresora + '" "' + tmpFile + '"';
 
         sendLog("info", "Ejecutando: " + comando); // <-- agrega esto
