@@ -260,38 +260,37 @@ function imprimirPorUSB(pedido, tipo, categoria, items, nombreImpresora) {
         const tmpFile = path.join(os.tmpdir(), "tastica_ticket_" + Date.now() + ".txt");
         fs.writeFileSync(tmpFile, contenido, "utf-8");
 
-        let comando;
         if (os.platform() === "win32") {
-            const tmpEscapado = tmpFile.replace(/\\/g, "\\\\");
-            // Busca el puerto automáticamente y copia directo
-            comando =
-                `powershell -Command "` +
-                `Add-Type -AssemblyName System.Drawing; ` +
-                `$printerName = '${nombreImpresora}'; ` +
-                `$portName = (Get-WmiObject Win32_Printer | Where-Object { $_.Name -eq $printerName }).PortName; ` +
-                `if ($portName -match '^(USB|LPT|COM)') { ` +
-                `  $content = [System.IO.File]::ReadAllBytes('${tmpEscapado}'); ` +
-                `  $port = New-Object System.IO.Ports.SerialPort $portName; ` +
-                `  $stream = [System.IO.File]::OpenWrite('\\\\\\\\.\\\\\\\\'+ $portName); ` +
-                `  $stream.Write($content, 0, $content.Length); ` +
-                `  $stream.Close(); ` +
-                `  Write-Output ('Puerto: ' + $portName) ` +
-                `} else { ` +
-                `  Copy-Item '${tmpEscapado}' -Destination ('\\\\\\\\.\\\\\\\\'+ $portName) ` +
-                `}"`;
+            const cmdEstablecer = `rundll32 printui.dll,PrintUIEntry /y /n "${nombreImpresora}"`;
+            exec(cmdEstablecer, errSet => {
+                if (errSet)
+                    sendLog(
+                        "warn",
+                        "No se pudo establecer impresora predeterminada: " + errSet.message
+                    );
+
+                const cmdImprimir = `notepad /p "${tmpFile}"`;
+                sendLog("info", "Imprimiendo via notepad: " + tmpFile);
+
+                exec(cmdImprimir, (err, stdout, stderr) => {
+                    setTimeout(() => fs.unlink(tmpFile, () => {}), 5000);
+                    if (err)
+                        return reject(
+                            new Error("Error USB " + nombreImpresora + ": " + err.message)
+                        );
+                    resolve();
+                });
+            });
         } else {
-            comando = `lp -d "${nombreImpresora}" "${tmpFile}"`;
+            exec(`lp -d "${nombreImpresora}" "${tmpFile}"`, (err, stdout, stderr) => {
+                if (stdout) sendLog("info", "stdout: " + stdout);
+                if (stderr) sendLog("warn", "stderr: " + stderr);
+                fs.unlink(tmpFile, () => {});
+                if (err)
+                    return reject(new Error("Error USB " + nombreImpresora + ": " + err.message));
+                resolve();
+            });
         }
-
-        sendLog("info", "Imprimiendo en: " + nombreImpresora);
-
-        exec(comando, (err, stdout, stderr) => {
-            if (stdout) sendLog("info", "stdout: " + stdout);
-            if (stderr) sendLog("warn", "stderr: " + stderr);
-            fs.unlink(tmpFile, () => {});
-            if (err) return reject(new Error("Error USB " + nombreImpresora + ": " + err.message));
-            resolve();
-        });
     });
 }
 
