@@ -263,20 +263,27 @@ function imprimirPorUSB(pedido, tipo, categoria, items, nombreImpresora) {
         let comando;
         if (os.platform() === "win32") {
             const tmpEscapado = tmpFile.replace(/\\/g, "\\\\");
+            // Busca el puerto automáticamente y copia directo
             comando =
                 `powershell -Command "` +
-                `$raw = [System.IO.File]::ReadAllBytes('${tmpEscapado}'); ` +
-                `$ticket = [System.Text.Encoding]::Default.GetString($raw); ` +
-                `$pd = New-Object System.Drawing.Printing.PrintDocument; ` +
-                `$pd.PrinterSettings.PrinterName = '${nombreImpresora}'; ` +
-                `$pd.DefaultPageSettings.PaperSize = New-Object System.Drawing.Printing.PaperSize('Custom', 300, 1100); ` +
-                `$pd.Add_PrintPage({ param($s, $e) $e.Graphics.DrawString($ticket, (New-Object System.Drawing.Font('Courier New', 9)), [System.Drawing.Brushes]::Black, 0, 0) }); ` +
-                `$pd.Print()"`;
+                `Add-Type -AssemblyName System.Drawing; ` +
+                `$printerName = '${nombreImpresora}'; ` +
+                `$portName = (Get-WmiObject Win32_Printer | Where-Object { $_.Name -eq $printerName }).PortName; ` +
+                `if ($portName -match '^(USB|LPT|COM)') { ` +
+                `  $content = [System.IO.File]::ReadAllBytes('${tmpEscapado}'); ` +
+                `  $port = New-Object System.IO.Ports.SerialPort $portName; ` +
+                `  $stream = [System.IO.File]::OpenWrite('\\\\\\\\.\\\\\\\\'+ $portName); ` +
+                `  $stream.Write($content, 0, $content.Length); ` +
+                `  $stream.Close(); ` +
+                `  Write-Output ('Puerto: ' + $portName) ` +
+                `} else { ` +
+                `  Copy-Item '${tmpEscapado}' -Destination ('\\\\\\\\.\\\\\\\\'+ $portName) ` +
+                `}"`;
         } else {
             comando = `lp -d "${nombreImpresora}" "${tmpFile}"`;
         }
 
-        sendLog("info", "Ejecutando impresión en: " + nombreImpresora);
+        sendLog("info", "Imprimiendo en: " + nombreImpresora);
 
         exec(comando, (err, stdout, stderr) => {
             if (stdout) sendLog("info", "stdout: " + stdout);
