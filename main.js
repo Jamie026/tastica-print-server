@@ -3,8 +3,6 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const axios = require("axios");
-const escpos = require("escpos");
-escpos.Network = require("escpos-network");
 const { exec } = require("child_process");
 
 const CONFIG_FILE = path.join(app.getPath("userData"), "config_tastica.json");
@@ -107,7 +105,7 @@ async function iniciarAgente() {
             sendLog("ok", "Sede cargada: " + config.id_sede);
             arrancarBucle(config.id_sede);
         } catch (e) {
-            sendLog("error", "Error leyendo configuración: " + e.message);
+            sendLog("error", "Error leyendo configuracion: " + e.message);
             sendEstado("error");
         }
     } else {
@@ -199,7 +197,7 @@ async function procesarPedidosArray(pedidosArray, configImpresoras, tipo, id_sed
             const impresoraInfo = configImpresoras[categoria];
 
             if (!impresoraInfo) {
-                sendLog("warn", "Sin impresora para categoría: " + categoria);
+                sendLog("warn", "Sin impresora para categoria: " + categoria);
                 continue;
             }
 
@@ -213,7 +211,7 @@ async function procesarPedidosArray(pedidosArray, configImpresoras, tipo, id_sed
                 }
                 sendLog(
                     "ok",
-                    categoria + " → " + tipoConexion.toUpperCase() + " (" + conexion + ")"
+                    categoria + " -> " + tipoConexion.toUpperCase() + " (" + conexion + ")"
                 );
             } catch (err) {
                 exitoGeneral = false;
@@ -235,150 +233,139 @@ async function procesarPedidosArray(pedidosArray, configImpresoras, tipo, id_sed
     }
 }
 
+function buildRawBytes(pedido, tipo, categoria, items) {
+    const ESC_INIT = Buffer.from([0x1b, 0x40]);
+    const ESC_FEED = Buffer.from([0x1b, 0x64, 0x04]);
+    const ESC_CUT = Buffer.from([0x1d, 0x56, 0x42, 0x00]);
+
+    const sep = "--------------------------------\n";
+    let texto = "";
+
+    texto += "AREA: " + categoria.toUpperCase() + "\n";
+    texto += sep;
+
+    if (tipo === "MESA") {
+        texto += "MESA: " + pedido.numero_mesa + "\n";
+    } else {
+        texto += "DELIVERY #" + pedido.id_delivery + "\n";
+        texto += "DIR: " + pedido.direccion + "\n";
+        if (pedido.referencia) texto += "REF: " + pedido.referencia + "\n";
+        if (pedido.telefono) texto += "TEL: " + pedido.telefono + "\n";
+    }
+
+    texto += "FECHA: " + new Date().toLocaleTimeString() + "\n";
+    texto += sep + "\n";
+
+    let subtotal = 0;
+    items.forEach(p => {
+        texto += p.cantidad + "x " + p.nombre + "\n";
+        if (p.variaciones_seleccionadas && p.variaciones_seleccionadas.length > 0) {
+            const agrupadas = p.variaciones_seleccionadas.reduce((acc, v) => {
+                if (!acc[v.grupo]) acc[v.grupo] = [];
+                acc[v.grupo].push(v.opcion);
+                return acc;
+            }, {});
+            for (const [grupo, opciones] of Object.entries(agrupadas)) {
+                texto += "   - " + grupo + ": " + opciones.join(", ") + "\n";
+            }
+        }
+        if (p.variaciones_texto) texto += "   * NOTA: " + p.variaciones_texto + "\n";
+        subtotal += parseFloat(p.precio) * p.cantidad;
+    });
+
+    texto += "\n" + sep;
+    texto += "Parcial: S/ " + subtotal.toFixed(2) + "\n";
+
+    const ticketBuf = Buffer.from(texto, "ascii");
+    return Buffer.concat([ESC_INIT, ticketBuf, ESC_FEED, ESC_CUT]);
+}
+
 function imprimirPorRed(pedido, tipo, categoria, items, ip) {
     return new Promise((resolve, reject) => {
-        const device = new escpos.Network(ip, PUERTO_IMPRESORA);
-        const printer = new escpos.Printer(device);
+        const net = require("net");
+        const socket = new net.Socket();
+        const payload = buildRawBytes(pedido, tipo, categoria, items);
 
-        device.open(error => {
-            if (error) return reject(new Error("Impresora de red desconectada: " + ip));
-            try {
-                construirTicket(printer, pedido, tipo, categoria, items);
-                printer.feed(3).cut().close();
+        socket.setTimeout(5000);
+
+        socket.connect(PUERTO_IMPRESORA, ip, () => {
+            socket.write(payload, () => {
+                socket.destroy();
                 resolve();
-            } catch (err) {
-                reject(err);
-            }
+            });
+        });
+
+        socket.on("error", err => {
+            socket.destroy();
+            reject(new Error("Impresora de red desconectada: " + ip + " - " + err.message));
+        });
+
+        socket.on("timeout", () => {
+            socket.destroy();
+            reject(new Error("Timeout conectando a impresora: " + ip));
         });
     });
 }
 
 function imprimirPorUSB(pedido, tipo, categoria, items, nombreImpresora) {
     return new Promise((resolve, reject) => {
-        const lineas = generarLineasTicket(pedido, tipo, categoria, items);
-        const contenido = lineas.join("\r\n");
-        const tmpFile = path.join(os.tmpdir(), "tastica_ticket_" + Date.now() + ".txt");
-        fs.writeFileSync(tmpFile, contenido, "utf-8");
+        const payload = buildRawBytes(pedido, tipo, categoria, items);
+        const tmpFile = path.join(os.tmpdir(), "tastica_ticket_" + Date.now() + ".bin");
+        fs.writeFileSync(tmpFile, payload);
 
-        if (os.platform() === "win32") {
-            const cmdEstablecer =
-                'rundll32 printui.dll,PrintUIEntry /y /n "' + nombreImpresora + '"';
-            exec(cmdEstablecer, errSet => {
-                if (errSet) {
-                    sendLog(
-                        "warn",
-                        "No se pudo establecer impresora predeterminada: " + errSet.message
-                    );
-                }
+        const ps =
+            "" +
+            "$bytes = [System.IO.File]::ReadAllBytes('" +
+            tmpFile +
+            "');" +
+            "$hPrinter = [IntPtr]::Zero;" +
+            "[RawPrint]::OpenPrinter('" +
+            nombreImpresora +
+            "', [ref]$hPrinter, [IntPtr]::Zero);" +
+            "$d = New-Object RawPrint+DOCINFO;" +
+            "$d.pDocName = 'Ticket';" +
+            "$d.pOutputFile = $null;" +
+            "$d.pDataType = 'RAW';" +
+            "[RawPrint]::StartDocPrinter($hPrinter, 1, [ref]$d);" +
+            "[RawPrint]::StartPagePrinter($hPrinter);" +
+            "$w = 0;" +
+            "[RawPrint]::WritePrinter($hPrinter, $bytes, $bytes.Length, [ref]$w);" +
+            "[RawPrint]::EndPagePrinter($hPrinter);" +
+            "[RawPrint]::EndDocPrinter($hPrinter);" +
+            "[RawPrint]::ClosePrinter($hPrinter);";
 
-                const cmdImprimir = 'notepad /p "' + tmpFile + '"';
-                sendLog("info", "Imprimiendo via notepad: " + tmpFile);
+        const definition =
+            "" +
+            "using System;" +
+            "using System.Runtime.InteropServices;" +
+            "public class RawPrint {" +
+            '[DllImport("winspool.drv", CharSet=CharSet.Auto, SetLastError=true)]' +
+            "public static extern bool OpenPrinter(string n, out IntPtr h, IntPtr d);" +
+            '[DllImport("winspool.drv", SetLastError=true)]' +
+            "public static extern bool ClosePrinter(IntPtr h);" +
+            '[DllImport("winspool.drv", CharSet=CharSet.Auto, SetLastError=true)]' +
+            "public static extern int StartDocPrinter(IntPtr h, int l, ref DOCINFO d);" +
+            '[DllImport("winspool.drv", SetLastError=true)]' +
+            "public static extern bool EndDocPrinter(IntPtr h);" +
+            '[DllImport("winspool.drv", SetLastError=true)]' +
+            "public static extern bool StartPagePrinter(IntPtr h);" +
+            '[DllImport("winspool.drv", SetLastError=true)]' +
+            "public static extern bool EndPagePrinter(IntPtr h);" +
+            '[DllImport("winspool.drv", SetLastError=true)]' +
+            "public static extern bool WritePrinter(IntPtr h, byte[] b, int c, out int w);" +
+            "[StructLayout(LayoutKind.Sequential, CharSet=CharSet.Auto)]" +
+            "public struct DOCINFO {" +
+            "[MarshalAs(UnmanagedType.LPTStr)] public string pDocName;" +
+            "[MarshalAs(UnmanagedType.LPTStr)] public string pOutputFile;" +
+            "[MarshalAs(UnmanagedType.LPTStr)] public string pDataType;" +
+            "}}";
 
-                exec(cmdImprimir, err => {
-                    setTimeout(() => {
-                        fs.unlink(tmpFile, () => {});
-                    }, 5000);
-                    if (err) {
-                        return reject(
-                            new Error("Error USB " + nombreImpresora + ": " + err.message)
-                        );
-                    }
-                    resolve();
-                });
-            });
-        } else {
-            const cmdLinux = 'lp -d "' + nombreImpresora + '" "' + tmpFile + '"';
-            exec(cmdLinux, (err, stdout, stderr) => {
-                if (stdout) sendLog("info", "stdout: " + stdout);
-                if (stderr) sendLog("warn", "stderr: " + stderr);
-                fs.unlink(tmpFile, () => {});
-                if (err) {
-                    return reject(new Error("Error USB " + nombreImpresora + ": " + err.message));
-                }
-                resolve();
-            });
-        }
+        const fullScript = "Add-Type -TypeDefinition '" + definition + "';" + ps;
+
+        exec('powershell -NoProfile -Command "' + fullScript + '"', err => {
+            setTimeout(() => fs.unlink(tmpFile, () => {}), 3000);
+            if (err) return reject(new Error("Error USB " + nombreImpresora + ": " + err.message));
+            resolve();
+        });
     });
-}
-
-function generarLineasTicket(pedido, tipo, categoria, items) {
-    const sep = "--------------------------------";
-    const lineas = [];
-    lineas.push("AREA: " + categoria.toUpperCase());
-    lineas.push(sep);
-    if (tipo === "MESA") {
-        lineas.push("MESA: " + pedido.numero_mesa);
-    } else {
-        lineas.push("DELIVERY #" + pedido.id_delivery);
-        lineas.push("DIR: " + pedido.direccion);
-        if (pedido.referencia) lineas.push("REF: " + pedido.referencia);
-        if (pedido.telefono) lineas.push("TEL: " + pedido.telefono);
-    }
-    lineas.push("FECHA: " + new Date().toLocaleTimeString());
-    lineas.push(sep);
-    lineas.push("");
-    let subtotal = 0;
-    items.forEach(p => {
-        lineas.push(p.cantidad + "x " + p.nombre);
-        if (p.variaciones_seleccionadas && p.variaciones_seleccionadas.length > 0) {
-            const agrupadas = p.variaciones_seleccionadas.reduce((acc, v) => {
-                if (!acc[v.grupo]) acc[v.grupo] = [];
-                acc[v.grupo].push(v.opcion);
-                return acc;
-            }, {});
-            for (const [grupo, opciones] of Object.entries(agrupadas)) {
-                lineas.push("   - " + grupo + ": " + opciones.join(", "));
-            }
-        }
-        if (p.variaciones_texto) lineas.push("   * NOTA: " + p.variaciones_texto);
-        subtotal += parseFloat(p.precio) * p.cantidad;
-    });
-    lineas.push("");
-    lineas.push(sep);
-    lineas.push("Parcial: S/ " + subtotal.toFixed(2));
-    lineas.push("\n\n\n");
-    return lineas;
-}
-
-function construirTicket(printer, pedido, tipo, categoria, items) {
-    printer
-        .align("ct")
-        .size(1, 1)
-        .text("AREA: " + categoria.toUpperCase())
-        .size(0, 0)
-        .text("--------------------------------")
-        .align("lt");
-    if (tipo === "MESA") {
-        printer.text("MESA: " + pedido.numero_mesa);
-    } else {
-        printer.text("DELIVERY #" + pedido.id_delivery);
-        printer.text("DIR: " + pedido.direccion);
-        if (pedido.referencia) printer.text("REF: " + pedido.referencia);
-        if (pedido.telefono) printer.text("TEL: " + pedido.telefono);
-    }
-    printer
-        .text("FECHA: " + new Date().toLocaleTimeString())
-        .text("--------------------------------")
-        .feed(1);
-    let subtotal = 0;
-    items.forEach(p => {
-        printer.text(p.cantidad + "x " + p.nombre);
-        if (p.variaciones_seleccionadas && p.variaciones_seleccionadas.length > 0) {
-            const agrupadas = p.variaciones_seleccionadas.reduce((acc, v) => {
-                if (!acc[v.grupo]) acc[v.grupo] = [];
-                acc[v.grupo].push(v.opcion);
-                return acc;
-            }, {});
-            for (const [grupo, opciones] of Object.entries(agrupadas)) {
-                printer.text("   - " + grupo + ": " + opciones.join(", "));
-            }
-        }
-        if (p.variaciones_texto) printer.text("   * NOTA: " + p.variaciones_texto);
-        subtotal += parseFloat(p.precio) * p.cantidad;
-    });
-    printer
-        .feed(1)
-        .text("--------------------------------")
-        .align("rt")
-        .text("Parcial: S/ " + subtotal.toFixed(2));
 }
