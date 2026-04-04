@@ -235,30 +235,52 @@ async function procesarPedidosArray(pedidosArray, configImpresoras, tipo, id_sed
 
 function buildRawBytes(pedido, tipo, categoria, items) {
     const ESC_INIT = Buffer.from([0x1b, 0x40]);
+    const ESC_BOLD_ON = Buffer.from([0x1b, 0x45, 0x01]);
+    const ESC_BOLD_OFF = Buffer.from([0x1b, 0x45, 0x00]);
     const ESC_FEED = Buffer.from([0x1b, 0x64, 0x04]);
     const ESC_CUT = Buffer.from([0x1d, 0x56, 0x42, 0x00]);
 
-    const sep = "--------------------------------\n";
+    const SEP = "--------------------------------\n";
     let texto = "";
 
+    // ── Encabezado de área ────────────────────────────────────────
     texto += "AREA: " + categoria.toUpperCase() + "\n";
-    texto += sep;
+    texto += SEP;
 
+    // ── Tipo de pedido y datos según origen ───────────────────────
     if (tipo === "MESA") {
         texto += "MESA: " + pedido.numero_mesa + "\n";
     } else {
-        texto += "DELIVERY #" + pedido.id_delivery + "\n";
-        texto += "DIR: " + pedido.direccion + "\n";
-        if (pedido.referencia) texto += "REF: " + pedido.referencia + "\n";
-        if (pedido.telefono) texto += "TEL: " + pedido.telefono + "\n";
+        // DELIVERY o PICKUP — detectar por tipo_entrega del pedido
+        const esRecojo = pedido.tipo_entrega === "pickup";
+
+        if (esRecojo) {
+            // ── RECOJO EN LOCAL ───────────────────────────────────
+            texto += "*** RECOJO EN LOCAL ***\n";
+            texto += SEP;
+            texto += "PEDIDO #" + pedido.id_delivery + "\n";
+            if (pedido.telefono) texto += "TEL CLIENTE: " + pedido.telefono + "\n";
+        } else {
+            // ── DELIVERY A DOMICILIO ──────────────────────────────
+            texto += "*** DELIVERY ***\n";
+            texto += SEP;
+            texto += "PEDIDO #" + pedido.id_delivery + "\n";
+            if (pedido.direccion) texto += "DIRECCION:   " + pedido.direccion + "\n";
+            if (pedido.referencia) texto += "REFERENCIA:  " + pedido.referencia + "\n";
+            if (pedido.telefono) texto += "TEL CLIENTE: " + pedido.telefono + "\n";
+        }
     }
 
-    texto += "FECHA: " + new Date().toLocaleTimeString() + "\n";
-    texto += sep + "\n";
+    texto += "HORA: " + new Date().toLocaleTimeString() + "\n";
+    texto += SEP + "\n";
 
+    // ── Items del pedido ─────────────────────────────────────────
     let subtotal = 0;
+
     items.forEach(p => {
-        texto += p.cantidad + "x " + p.nombre + "\n";
+        texto += p.cantidad + "x  " + p.nombre + "\n";
+
+        // Variaciones estructuradas (objeto con grupo + opcion)
         if (p.variaciones_seleccionadas && p.variaciones_seleccionadas.length > 0) {
             const agrupadas = p.variaciones_seleccionadas.reduce((acc, v) => {
                 if (!acc[v.grupo]) acc[v.grupo] = [];
@@ -269,14 +291,26 @@ function buildRawBytes(pedido, tipo, categoria, items) {
                 texto += "   - " + grupo + ": " + opciones.join(", ") + "\n";
             }
         }
-        if (p.variaciones_texto) texto += "   * NOTA: " + p.variaciones_texto + "\n";
+
+        // Variaciones como texto plano
+        if (p.variaciones_texto) {
+            texto += "   * " + p.variaciones_texto + "\n";
+        }
+
         subtotal += parseFloat(p.precio) * p.cantidad;
     });
 
-    texto += "\n" + sep;
-    texto += "Parcial: S/ " + subtotal.toFixed(2) + "\n";
+    texto += "\n" + SEP;
+    texto += "SUBTOTAL: " + subtotal.toFixed(2) + "\n";
 
-    const ticketBuf = Buffer.from(texto, "ascii");
+    // ── Footer adicional para delivery/recojo ─────────────────────
+    if (tipo === "DELIVERY" || tipo === "PICKUP") {
+        const esRecojo = pedido.tipo_entrega === "pickup";
+        texto += esRecojo ? "ENTREGA: Recojo en Local\n" : "ENTREGA: Delivery a domicilio\n";
+        texto += "PAGO:    Pendiente de confirmacion\n";
+    }
+
+    const ticketBuf = Buffer.from(texto, "latin1");
     return Buffer.concat([ESC_INIT, ticketBuf, ESC_FEED, ESC_CUT]);
 }
 
