@@ -243,25 +243,20 @@ function buildRawBytes(pedido, tipo, categoria, items) {
     const SEP = "--------------------------------\n";
     let texto = "";
 
-    // ── Encabezado de área ────────────────────────────────────────
     texto += "AREA: " + categoria.toUpperCase() + "\n";
     texto += SEP;
 
-    // ── Tipo de pedido y datos según origen ───────────────────────
     if (tipo === "MESA") {
         texto += "MESA: " + pedido.numero_mesa + "\n";
     } else {
-        // DELIVERY o PICKUP — detectar por tipo_entrega del pedido
         const esRecojo = pedido.tipo_entrega === "pickup";
 
         if (esRecojo) {
-            // ── RECOJO EN LOCAL ───────────────────────────────────
             texto += "*** RECOJO EN LOCAL ***\n";
             texto += SEP;
             texto += "PEDIDO #" + pedido.id_delivery + "\n";
             if (pedido.telefono) texto += "TEL CLIENTE: " + pedido.telefono + "\n";
         } else {
-            // ── DELIVERY A DOMICILIO ──────────────────────────────
             texto += "*** DELIVERY ***\n";
             texto += SEP;
             texto += "PEDIDO #" + pedido.id_delivery + "\n";
@@ -274,13 +269,11 @@ function buildRawBytes(pedido, tipo, categoria, items) {
     texto += "HORA: " + new Date().toLocaleTimeString() + "\n";
     texto += SEP + "\n";
 
-    // ── Items del pedido ─────────────────────────────────────────
     let subtotal = 0;
 
     items.forEach(p => {
         texto += p.cantidad + "x  " + p.nombre + "\n";
 
-        // Variaciones estructuradas (objeto con grupo + opcion)
         if (p.variaciones_seleccionadas && p.variaciones_seleccionadas.length > 0) {
             const agrupadas = p.variaciones_seleccionadas.reduce((acc, v) => {
                 if (!acc[v.grupo]) acc[v.grupo] = [];
@@ -292,7 +285,6 @@ function buildRawBytes(pedido, tipo, categoria, items) {
             }
         }
 
-        // Variaciones como texto plano
         if (p.variaciones_texto) {
             texto += "   * " + p.variaciones_texto + "\n";
         }
@@ -303,7 +295,6 @@ function buildRawBytes(pedido, tipo, categoria, items) {
     texto += "\n" + SEP;
     texto += "SUBTOTAL: " + subtotal.toFixed(2) + "\n";
 
-    // ── Footer adicional para delivery/recojo ─────────────────────
     if (tipo === "DELIVERY" || tipo === "PICKUP") {
         const esRecojo = pedido.tipo_entrega === "pickup";
         texto += esRecojo ? "ENTREGA: Recojo en Local\n" : "ENTREGA: Delivery a domicilio\n";
@@ -344,62 +335,73 @@ function imprimirPorRed(pedido, tipo, categoria, items, ip) {
 function imprimirPorUSB(pedido, tipo, categoria, items, nombreImpresora) {
     return new Promise((resolve, reject) => {
         const payload = buildRawBytes(pedido, tipo, categoria, items);
-        const tmpFile = path.join(os.tmpdir(), "tastica_ticket_" + Date.now() + ".bin");
-        fs.writeFileSync(tmpFile, payload);
+        const tmpBin = path.join(os.tmpdir(), "tastica_ticket_" + Date.now() + ".bin");
+        const tmpPs1 = tmpBin.replace(".bin", ".ps1");
 
-        const ps =
-            "" +
-            "$bytes = [System.IO.File]::ReadAllBytes('" +
-            tmpFile +
-            "');" +
-            "$hPrinter = [IntPtr]::Zero;" +
-            "[RawPrint]::OpenPrinter('" +
-            nombreImpresora +
-            "', [ref]$hPrinter, [IntPtr]::Zero);" +
-            "$d = New-Object RawPrint+DOCINFO;" +
-            "$d.pDocName = 'Ticket';" +
-            "$d.pOutputFile = $null;" +
-            "$d.pDataType = 'RAW';" +
-            "[RawPrint]::StartDocPrinter($hPrinter, 1, [ref]$d);" +
-            "[RawPrint]::StartPagePrinter($hPrinter);" +
-            "$w = 0;" +
-            "[RawPrint]::WritePrinter($hPrinter, $bytes, $bytes.Length, [ref]$w);" +
-            "[RawPrint]::EndPagePrinter($hPrinter);" +
-            "[RawPrint]::EndDocPrinter($hPrinter);" +
-            "[RawPrint]::ClosePrinter($hPrinter);";
+        fs.writeFileSync(tmpBin, payload);
 
-        const definition =
-            "" +
-            "using System;" +
-            "using System.Runtime.InteropServices;" +
-            "public class RawPrint {" +
-            '[DllImport("winspool.drv", CharSet=CharSet.Auto, SetLastError=true)]' +
-            "public static extern bool OpenPrinter(string n, out IntPtr h, IntPtr d);" +
-            '[DllImport("winspool.drv", SetLastError=true)]' +
-            "public static extern bool ClosePrinter(IntPtr h);" +
-            '[DllImport("winspool.drv", CharSet=CharSet.Auto, SetLastError=true)]' +
-            "public static extern int StartDocPrinter(IntPtr h, int l, ref DOCINFO d);" +
-            '[DllImport("winspool.drv", SetLastError=true)]' +
-            "public static extern bool EndDocPrinter(IntPtr h);" +
-            '[DllImport("winspool.drv", SetLastError=true)]' +
-            "public static extern bool StartPagePrinter(IntPtr h);" +
-            '[DllImport("winspool.drv", SetLastError=true)]' +
-            "public static extern bool EndPagePrinter(IntPtr h);" +
-            '[DllImport("winspool.drv", SetLastError=true)]' +
-            "public static extern bool WritePrinter(IntPtr h, byte[] b, int c, out int w);" +
-            "[StructLayout(LayoutKind.Sequential, CharSet=CharSet.Auto)]" +
-            "public struct DOCINFO {" +
-            "[MarshalAs(UnmanagedType.LPTStr)] public string pDocName;" +
-            "[MarshalAs(UnmanagedType.LPTStr)] public string pOutputFile;" +
-            "[MarshalAs(UnmanagedType.LPTStr)] public string pDataType;" +
-            "}}";
+        const definition = [
+            "using System;",
+            "using System.Runtime.InteropServices;",
+            "public class RawPrint {",
+            '  [DllImport("winspool.drv", CharSet=CharSet.Auto, SetLastError=true)]',
+            "  public static extern bool OpenPrinter(string n, out IntPtr h, IntPtr d);",
+            '  [DllImport("winspool.drv", SetLastError=true)]',
+            "  public static extern bool ClosePrinter(IntPtr h);",
+            '  [DllImport("winspool.drv", CharSet=CharSet.Auto, SetLastError=true)]',
+            "  public static extern int StartDocPrinter(IntPtr h, int l, ref DOCINFO d);",
+            '  [DllImport("winspool.drv", SetLastError=true)]',
+            "  public static extern bool EndDocPrinter(IntPtr h);",
+            '  [DllImport("winspool.drv", SetLastError=true)]',
+            "  public static extern bool StartPagePrinter(IntPtr h);",
+            '  [DllImport("winspool.drv", SetLastError=true)]',
+            "  public static extern bool EndPagePrinter(IntPtr h);",
+            '  [DllImport("winspool.drv", SetLastError=true)]',
+            "  public static extern bool WritePrinter(IntPtr h, byte[] b, int c, out int w);",
+            "  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Auto)]",
+            "  public struct DOCINFO {",
+            "    [MarshalAs(UnmanagedType.LPTStr)] public string pDocName;",
+            "    [MarshalAs(UnmanagedType.LPTStr)] public string pOutputFile;",
+            "    [MarshalAs(UnmanagedType.LPTStr)] public string pDataType;",
+            "  }",
+            "}"
+        ].join("\n");
 
-        const fullScript = "Add-Type -TypeDefinition '" + definition + "';" + ps;
+        const script = [
+            "Add-Type -TypeDefinition @'",
+            definition,
+            "'@",
+            "$bytes = [System.IO.File]::ReadAllBytes('" + tmpBin + "')",
+            "$hPrinter = [IntPtr]::Zero",
+            "[RawPrint]::OpenPrinter('" + nombreImpresora + "', [ref]$hPrinter, [IntPtr]::Zero)",
+            "$d = New-Object RawPrint+DOCINFO",
+            "$d.pDocName = 'Ticket'",
+            "$d.pOutputFile = $null",
+            "$d.pDataType = 'RAW'",
+            "[RawPrint]::StartDocPrinter($hPrinter, 1, [ref]$d)",
+            "[RawPrint]::StartPagePrinter($hPrinter)",
+            "$w = 0",
+            "[RawPrint]::WritePrinter($hPrinter, $bytes, $bytes.Length, [ref]$w)",
+            "[RawPrint]::EndPagePrinter($hPrinter)",
+            "[RawPrint]::EndDocPrinter($hPrinter)",
+            "[RawPrint]::ClosePrinter($hPrinter)"
+        ].join("\n");
 
-        exec('powershell -NoProfile -Command "' + fullScript + '"', err => {
-            setTimeout(() => fs.unlink(tmpFile, () => {}), 3000);
-            if (err) return reject(new Error("Error USB " + nombreImpresora + ": " + err.message));
-            resolve();
-        });
+        fs.writeFileSync(tmpPs1, script, "utf-8");
+
+        exec(
+            'powershell -NoProfile -ExecutionPolicy Bypass -File "' + tmpPs1 + '"',
+            (err, stdout, stderr) => {
+                setTimeout(() => {
+                    fs.unlink(tmpBin, () => {});
+                    fs.unlink(tmpPs1, () => {});
+                }, 3000);
+                if (err)
+                    return reject(
+                        new Error("Error USB " + nombreImpresora + ": " + stderr || err.message)
+                    );
+                resolve();
+            }
+        );
     });
 }
